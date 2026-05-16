@@ -1,0 +1,149 @@
+import { Button, CheckBox, LineEdit, ScrollView, VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+export struct FlashRow {
+    enabled: bool,
+    file-path: string,
+    address: string,
+}
+
+export component AppWindow inherits Window {
+    in-out property <[FlashRow]> rows: [];
+    in-out property <string> output-folder: "";
+    in-out property <string> status-text: "";
+
+    callback import-folder();
+    callback add-row();
+    callback remove-selected();
+    callback browse-file(int);
+    callback browse-output();
+    callback start-compress();
+    callback row-enabled-changed(int, bool);
+    callback row-path-changed(int, string);
+    callback row-addr-changed(int, string);
+
+    title: "MFProg-ESP-fw-tool GUI";
+    preferred-width: 800px;
+    preferred-height: 500px;
+
+    VerticalBox {
+        padding: 12px;
+        spacing: 8px;
+
+        // Toolbar
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "导入文件夹";
+                clicked => { root.import-folder(); }
+            }
+            Button {
+                text: "添加行";
+                clicked => { root.add-row(); }
+            }
+            Button {
+                text: "删除选中";
+                clicked => { root.remove-selected(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: "输出文件夹:";
+                vertical-alignment: center;
+            }
+            LineEdit {
+                text <=> root.output-folder;
+                horizontal-stretch: 2;
+                placeholder-text: "选择输出文件夹...";
+            }
+            Button {
+                text: "浏览...";
+                clicked => { root.browse-output(); }
+            }
+        }
+
+        // Header row
+        HorizontalLayout {
+            spacing: 4px;
+            height: 24px;
+            Rectangle { width: 32px; } // checkbox column
+            Text {
+                text: "文件路径";
+                horizontal-stretch: 3;
+                vertical-alignment: center;
+            }
+            Rectangle { width: 40px; } // browse button column
+            Text {
+                text: "@";
+                width: 24px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            Text {
+                text: "地址";
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+            }
+        }
+
+        // Scrollable file list
+        ScrollView {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                spacing: 4px;
+                for row[i] in root.rows: HorizontalLayout {
+                    spacing: 4px;
+                    height: 32px;
+
+                    CheckBox {
+                        width: 32px;
+                        checked: row.enabled;
+                        toggled => { root.row-enabled-changed(i, self.checked); }
+                    }
+
+                    LineEdit {
+                        text: row.file-path;
+                        horizontal-stretch: 3;
+                        placeholder-text: "选择文件...";
+                        edited(txt) => { root.row-path-changed(i, txt); }
+                    }
+
+                    Button {
+                        text: "...";
+                        width: 40px;
+                        clicked => { root.browse-file(i); }
+                    }
+
+                    Text {
+                        text: "@";
+                        width: 24px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    LineEdit {
+                        text: row.address;
+                        horizontal-stretch: 1;
+                        placeholder-text: "0x0";
+                        edited(txt) => { root.row-addr-changed(i, txt); }
+                    }
+                }
+            }
+        }
+
+        // Bottom bar
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: root.status-text;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                color: root.status-text != "" && root.status-text == "Error" ? red : black;
+            }
+            Button {
+                text: "开始压缩";
+                clicked => { root.start-compress(); }
+            }
+        }
+    }
+}

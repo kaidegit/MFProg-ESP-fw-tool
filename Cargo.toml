@@ -1,0 +1,3 @@
+[workspace]
+members = ["mfprog-esp-lib", "mfprog-esp-cli", "mfprog-esp-gui"]
+resolver = "2"

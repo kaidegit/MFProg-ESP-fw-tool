@@ -1,0 +1,12 @@
+[package]
+name = "mfprog-esp-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "MFProg-ESP-fw-tool"
+path = "src/main.rs"
+
+[dependencies]
+mfprog-esp-lib = { path = "../mfprog-esp-lib" }
+clap = { version = "4", features = ["derive"] }

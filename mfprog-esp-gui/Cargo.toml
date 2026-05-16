@@ -1,0 +1,16 @@
+[package]
+name = "mfprog-esp-gui"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "MFProg-ESP-fw-tool-gui"
+path = "src/main.rs"
+
+[build-dependencies]
+slint-build = "1.16"
+
+[dependencies]
+mfprog-esp-lib = { path = "../mfprog-esp-lib" }
+slint = "1.16"
+rfd = "0.15"
