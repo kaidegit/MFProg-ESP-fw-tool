@@ -1,6 +1,6 @@
 # MFProg-ESP-fw-tool
 
-基于 [compress_flash](https://github.com/OfflineProgrammerForEsp) 的 ESP 固件压缩打包工具，提供 CLI 和 GUI 两种使用方式。
+给MFProg使用的ESP 固件压缩打包工具，提供 CLI 和 GUI 两种使用方式。
 
 ## 功能
 
@@ -71,4 +71,4 @@ MFProg-ESP-fw-tool-gui
 
 ## License
 
-MIT
+AGPL 3.0
