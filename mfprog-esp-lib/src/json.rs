@@ -21,7 +21,7 @@ pub fn read_flasher_args(dir: &Path) -> io::Result<Value> {
     serde_json::from_str(&contents).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Failed to parse JSON: {}", e),
+            format!("解析 flasher_args.json 失败: {}", e),
         )
     })
 }
@@ -35,26 +35,28 @@ pub fn extract_flash_entries_from_json(
         .get("flash_files")
         .and_then(|v| v.as_object())
         .ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "No flash_files found in JSON")
+            io::Error::new(io::ErrorKind::InvalidData, "JSON 中缺少 flash_files 字段")
         })?;
 
     let mut entries = Vec::new();
     for (addr, filename_val) in flash_files {
         let filename = filename_val.as_str().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "flash_files values must be strings",
-            )
+            io::Error::new(io::ErrorKind::InvalidData, "flash_files 的值必须是字符串")
         })?;
         let safe_path = validate_project_relative_path(filename)?;
-        let file_path = canonical_base_dir.join(safe_path).canonicalize()?;
+        let file_path = canonical_base_dir
+            .join(safe_path)
+            .canonicalize()
+            .map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!("固件文件不存在或无法访问: {} ({})", filename, e),
+                )
+            })?;
         if !file_path.starts_with(&canonical_base_dir) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "flash_files path resolves outside project folder: {}",
-                    filename
-                ),
+                format!("固件路径解析后位于项目文件夹外: {}", filename),
             ));
         }
         entries.push(FlashEntry {
@@ -70,7 +72,7 @@ fn validate_project_relative_path(filename: &str) -> io::Result<&Path> {
     if filename.trim().is_empty() || path.as_os_str().is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "flash_files path must not be empty",
+            "flash_files 路径不能为空",
         ));
     }
 
@@ -80,10 +82,7 @@ fn validate_project_relative_path(filename: &str) -> io::Result<&Path> {
             Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
-                    format!(
-                        "flash_files path must stay inside project folder: {}",
-                        filename
-                    ),
+                    format!("flash_files 路径必须位于项目文件夹内: {}", filename),
                 ));
             }
         }
@@ -98,10 +97,18 @@ pub fn compress_entries(
     input_json: Option<&Value>,
 ) -> io::Result<()> {
     if output_dir.exists() {
-        return Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            format!("Output directory already exists: {}", output_dir.display()),
-        ));
+        if !output_dir.is_dir() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("输出路径已存在且不是文件夹: {}", output_dir.display()),
+            ));
+        }
+        if output_dir.read_dir()?.next().transpose()?.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("输出文件夹不是空文件夹: {}", output_dir.display()),
+            ));
+        }
     }
 
     let mut map_entries: BTreeMap<String, MapEntry> = BTreeMap::new();
@@ -111,7 +118,7 @@ pub fn compress_entries(
         if !entry.file_path.is_file() {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("File not found: {}", entry.file_path.display()),
+                format!("固件文件不存在: {}", entry.file_path.display()),
             ));
         }
 
@@ -133,7 +140,7 @@ pub fn compress_entries(
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,
                 format!(
-                    "Multiple input files would write the same output file: {} ({} and {})",
+                    "多个输入文件会写入同一个输出文件: {} ({} 和 {})",
                     output_path.display(),
                     existing_input.display(),
                     entry.file_path.display()
@@ -146,10 +153,7 @@ pub fn compress_entries(
     if planned_outputs.contains_key(&output_json_path) {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
-            format!(
-                "Compressed output would conflict with metadata file: {}",
-                output_json_path.display()
-            ),
+            format!("压缩输出会与元数据文件冲突: {}", output_json_path.display()),
         ));
     }
 
@@ -169,7 +173,7 @@ pub fn compress_entries(
         if output_path.exists() {
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,
-                format!("Output file already exists: {}", output_path.display()),
+                format!("输出文件已存在: {}", output_path.display()),
             ));
         }
 
@@ -217,14 +221,14 @@ pub fn compress_entries(
     if output_json_path.exists() {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
-            format!("Output file already exists: {}", output_json_path.display()),
+            format!("输出文件已存在: {}", output_json_path.display()),
         ));
     }
 
     let output_str = serde_json::to_string_pretty(&output_json).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Failed to serialize JSON: {}", e),
+            format!("序列化 flasher_args.json 失败: {}", e),
         )
     })?;
     fs::write(&output_json_path, output_str + "\n")?;
@@ -287,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn compress_entries_refuses_existing_output_dir_without_deleting_it() {
+    fn compress_entries_refuses_non_empty_output_dir_without_deleting_it() {
         let temp = TestDir::new("existing_output");
         let input = temp.file("bootloader.bin", b"boot");
         let output = temp.path.join("out");
@@ -307,6 +311,27 @@ mod tests {
 
         assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
         assert_eq!(fs::read(&sentinel).unwrap(), b"do not delete");
+    }
+
+    #[test]
+    fn compress_entries_accepts_empty_existing_output_dir() {
+        let temp = TestDir::new("empty_existing_output");
+        let input = temp.file("bootloader.bin", b"boot");
+        let output = temp.path.join("out");
+        fs::create_dir_all(&output).unwrap();
+
+        compress_entries(
+            &[FlashEntry {
+                addr: "0x0".to_string(),
+                file_path: input,
+            }],
+            &output,
+            None,
+        )
+        .unwrap();
+
+        assert!(output.join("bootloader.bin.zl").is_file());
+        assert!(output.join("flasher_args.json").is_file());
     }
 
     #[test]
