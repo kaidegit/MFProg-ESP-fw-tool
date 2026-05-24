@@ -129,7 +129,6 @@ pub fn compress_entries(
             .to_string_lossy()
             .to_string();
 
-        // Preserve relative subdir structure if the file is inside a folder
         let relative_path = filename.clone();
 
         let compressed_name = format!("{}.zl", relative_path);
@@ -216,6 +215,15 @@ pub fn compress_entries(
             "map".to_string(),
             serde_json::to_value(&map_entries).unwrap_or(Value::Null),
         );
+        if let Some(Value::Object(flash_files)) = obj.get_mut("flash_files") {
+            for (_, val) in flash_files.iter_mut() {
+                if let Value::String(s) = val {
+                    if let Some(name) = Path::new(s).file_name() {
+                        *s = name.to_string_lossy().to_string();
+                    }
+                }
+            }
+        }
     }
 
     if output_json_path.exists() {
@@ -440,5 +448,38 @@ mod tests {
 
         assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
         assert!(!output.exists());
+    }
+
+    #[test]
+    fn compress_entries_flattens_flash_files_paths_when_using_input_json() {
+        let temp = TestDir::new("flatten_flash_files");
+        let input = temp.file("build/app.bin", b"app");
+        let output = temp.path.join("out");
+        let input_json = json!({
+            "flash_files": {
+                "0x10000": "build/app.bin"
+            }
+        });
+
+        compress_entries(
+            &[FlashEntry {
+                addr: "0x10000".to_string(),
+                file_path: input,
+            }],
+            &output,
+            Some(&input_json),
+        )
+        .unwrap();
+
+        let output_json_str = fs::read_to_string(output.join("flasher_args.json")).unwrap();
+        let output_json: Value = serde_json::from_str(&output_json_str).unwrap();
+        let flash_files = output_json
+            .get("flash_files")
+            .and_then(|v| v.as_object())
+            .unwrap();
+        assert_eq!(
+            flash_files.get("0x10000").and_then(|v| v.as_str()),
+            Some("app.bin")
+        );
     }
 }
