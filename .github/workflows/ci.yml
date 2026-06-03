@@ -12,7 +12,11 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [
+          # ubuntu-latest,
+          # windows-latest,
+          macos-latest,
+        ]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -20,16 +24,16 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libxcb-shape0-dev \
-            libxcb-xfixes0-dev \
-            libgl1-mesa-dev \
-            libfontconfig1-dev \
-            libxkbcommon-dev
+      # - name: Install Linux dependencies
+      #   if: runner.os == 'Linux'
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y \
+      #       libxcb-shape0-dev \
+      #       libxcb-xfixes0-dev \
+      #       libgl1-mesa-dev \
+      #       libfontconfig1-dev \
+      #       libxkbcommon-dev
 
       - uses: Swatinem/rust-cache@v2
 
@@ -47,17 +51,22 @@ jobs:
         run: |
           mkdir -p dist
 
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp target/release/MFProg-ESP-fw-tool.exe \
-              dist/MFProg-ESP-fw-tool-${{ matrix.os }}.exe
-            cp target/release/MFProg-ESP-fw-tool-gui.exe \
-              dist/MFProg-ESP-fw-tool-gui-${{ matrix.os }}.exe
-          else
-            cp target/release/MFProg-ESP-fw-tool \
-              dist/MFProg-ESP-fw-tool-${{ matrix.os }}
-            cp target/release/MFProg-ESP-fw-tool-gui \
-              dist/MFProg-ESP-fw-tool-gui-${{ matrix.os }}
-          fi
+          cp target/release/MFProg-ESP-fw-tool \
+            dist/MFProg-ESP-fw-tool-${{ matrix.os }}
+          cp target/release/MFProg-ESP-fw-tool-gui \
+            dist/MFProg-ESP-fw-tool-gui-${{ matrix.os }}
+
+          # if [ "${{ runner.os }}" = "Windows" ]; then
+          #   cp target/release/MFProg-ESP-fw-tool.exe \
+          #     dist/MFProg-ESP-fw-tool-${{ matrix.os }}.exe
+          #   cp target/release/MFProg-ESP-fw-tool-gui.exe \
+          #     dist/MFProg-ESP-fw-tool-gui-${{ matrix.os }}.exe
+          # else
+          #   cp target/release/MFProg-ESP-fw-tool \
+          #     dist/MFProg-ESP-fw-tool-${{ matrix.os }}
+          #   cp target/release/MFProg-ESP-fw-tool-gui \
+          #     dist/MFProg-ESP-fw-tool-gui-${{ matrix.os }}
+          # fi
 
       - name: Upload release assets artifact
         uses: actions/upload-artifact@v4
@@ -73,6 +82,8 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download release assets
         uses: actions/download-artifact@v4
         with:
