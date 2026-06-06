@@ -1,3 +1,6 @@
 [workspace]
 members = ["mfprog-esp-lib", "mfprog-esp-cli", "mfprog-esp-gui"]
 resolver = "2"
+
+[patch.crates-io]
+parley = { path = "vendor/parley-0.8.0" }
