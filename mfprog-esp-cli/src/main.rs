@@ -46,9 +46,8 @@ fn main() -> std::io::Result<()> {
         println!("Done. Output written to {}", output_dir.display());
     } else if input_str.starts_with('[') {
         println!("File list mode");
-        let entries = parse_file_list(input_str).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
-        })?;
+        let entries = parse_file_list(input_str)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
 
         println!("  entries: {}", entries.len());
         println!("  output : {}", output_dir.display());
