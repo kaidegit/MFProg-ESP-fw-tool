@@ -113,6 +113,7 @@ pub fn compress_entries(
 
     let mut map_entries: BTreeMap<String, MapEntry> = BTreeMap::new();
     let mut planned_outputs: BTreeMap<PathBuf, PathBuf> = BTreeMap::new();
+    let mut flash_regions = Vec::new();
 
     for entry in entries {
         if !entry.file_path.is_file() {
@@ -121,6 +122,14 @@ pub fn compress_entries(
                 format!("固件文件不存在: {}", entry.file_path.display()),
             ));
         }
+        let addr = parse_flash_addr(&entry.addr)?;
+        let size = entry.file_path.metadata()?.len();
+        flash_regions.push(FlashRegion {
+            addr,
+            size,
+            raw_addr: entry.addr.clone(),
+            file_path: entry.file_path.clone(),
+        });
 
         let filename = entry
             .file_path
@@ -147,6 +156,8 @@ pub fn compress_entries(
             ));
         }
     }
+
+    validate_non_overlapping_flash_regions(&mut flash_regions)?;
 
     let output_json_path = output_dir.join("flasher_args.json");
     if planned_outputs.contains_key(&output_json_path) {
@@ -241,6 +252,64 @@ pub fn compress_entries(
     })?;
     fs::write(&output_json_path, output_str + "\n")?;
 
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct FlashRegion {
+    addr: u64,
+    size: u64,
+    raw_addr: String,
+    file_path: PathBuf,
+}
+
+fn parse_flash_addr(addr: &str) -> io::Result<u64> {
+    let trimmed = addr.trim();
+    if trimmed.starts_with("0x") || trimmed.starts_with("0X") {
+        u64::from_str_radix(&trimmed[2..], 16)
+    } else {
+        trimmed.parse::<u64>()
+    }
+    .map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("flash 地址无效: {} ({})", addr, e),
+        )
+    })
+}
+
+fn validate_non_overlapping_flash_regions(regions: &mut [FlashRegion]) -> io::Result<()> {
+    regions.sort_by_key(|region| region.addr);
+    for window in regions.windows(2) {
+        let prev = &window[0];
+        let curr = &window[1];
+        let prev_end = prev.addr.checked_add(prev.size).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "flash 区域地址溢出: {} @ {} (大小 {})",
+                    prev.file_path.display(),
+                    prev.raw_addr,
+                    prev.size
+                ),
+            )
+        })?;
+
+        if prev_end > curr.addr {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "flash 文件区域重叠: {} @ {} (大小 {}) 与 {} @ {} (大小 {})",
+                    prev.file_path.display(),
+                    prev.raw_addr,
+                    prev.size,
+                    curr.file_path.display(),
+                    curr.raw_addr,
+                    curr.size
+                ),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -481,5 +550,79 @@ mod tests {
             flash_files.get("0x10000").and_then(|v| v.as_str()),
             Some("app.bin")
         );
+    }
+
+    #[test]
+    fn compress_entries_rejects_overlapping_flash_regions() {
+        let temp = TestDir::new("overlapping_regions");
+        let bootloader = temp.file("bootloader.bin", b"boot");
+        let app = temp.file("app.bin", b"app");
+        let output = temp.path.join("out");
+
+        let err = compress_entries(
+            &[
+                FlashEntry {
+                    addr: "0x0".to_string(),
+                    file_path: bootloader,
+                },
+                FlashEntry {
+                    addr: "0x2".to_string(),
+                    file_path: app,
+                },
+            ],
+            &output,
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn compress_entries_accepts_adjacent_flash_regions() {
+        let temp = TestDir::new("adjacent_regions");
+        let bootloader = temp.file("bootloader.bin", b"boot");
+        let app = temp.file("app.bin", b"app");
+        let output = temp.path.join("out");
+
+        compress_entries(
+            &[
+                FlashEntry {
+                    addr: "0x0".to_string(),
+                    file_path: bootloader,
+                },
+                FlashEntry {
+                    addr: "0x4".to_string(),
+                    file_path: app,
+                },
+            ],
+            &output,
+            None,
+        )
+        .unwrap();
+
+        assert!(output.join("bootloader.bin.zl").is_file());
+        assert!(output.join("app.bin.zl").is_file());
+    }
+
+    #[test]
+    fn compress_entries_rejects_invalid_flash_addr() {
+        let temp = TestDir::new("invalid_addr");
+        let input = temp.file("app.bin", b"app");
+        let output = temp.path.join("out");
+
+        let err = compress_entries(
+            &[FlashEntry {
+                addr: "not-an-addr".to_string(),
+                file_path: input,
+            }],
+            &output,
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+        assert!(!output.exists());
     }
 }

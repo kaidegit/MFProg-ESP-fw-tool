@@ -14,26 +14,24 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(folder) = rfd::FileDialog::new().pick_folder() {
             let folder_str = folder.to_string_lossy().to_string();
             match read_flasher_args(&folder) {
-                Ok(json) => {
-                    match extract_flash_entries_from_json(&json, &folder) {
-                        Ok(entries) => {
-                            let rows: Vec<FlashRow> = entries
-                                .into_iter()
-                                .map(|e| FlashRow {
-                                    enabled: true,
-                                    file_path: e.file_path.to_string_lossy().to_string().into(),
-                                    address: e.addr.into(),
-                                })
-                                .collect();
-                            let model = Rc::new(VecModel::from(rows));
-                            ui.set_rows(ModelRc::from(model));
-                            ui.set_status_text(format!("导入成功: {}", folder_str).into());
-                        }
-                        Err(e) => {
-                            ui.set_status_text(format!("Error 解析 JSON: {}", e).into());
-                        }
+                Ok(json) => match extract_flash_entries_from_json(&json, &folder) {
+                    Ok(entries) => {
+                        let rows: Vec<FlashRow> = entries
+                            .into_iter()
+                            .map(|e| FlashRow {
+                                enabled: true,
+                                file_path: e.file_path.to_string_lossy().to_string().into(),
+                                address: e.addr.into(),
+                            })
+                            .collect();
+                        let model = Rc::new(VecModel::from(rows));
+                        ui.set_rows(ModelRc::from(model));
+                        ui.set_status_text(format!("导入成功: {}", folder_str).into());
                     }
-                }
+                    Err(e) => {
+                        ui.set_status_text(format!("Error 解析 JSON: {}", e).into());
+                    }
+                },
                 Err(e) => {
                     ui.set_status_text(format!("Error 读取 flasher_args.json: {}", e).into());
                 }
@@ -45,10 +43,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.on_add_row(move || {
         let ui = ui_weak.upgrade().unwrap();
         let rows = ui.get_rows();
-        let model = rows
-            .as_any()
-            .downcast_ref::<VecModel<FlashRow>>()
-            .unwrap();
+        let model = rows.as_any().downcast_ref::<VecModel<FlashRow>>().unwrap();
         model.push(FlashRow {
             enabled: true,
             file_path: Default::default(),
@@ -60,10 +55,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.on_remove_selected(move || {
         let ui = ui_weak.upgrade().unwrap();
         let rows = ui.get_rows();
-        let model = rows
-            .as_any()
-            .downcast_ref::<VecModel<FlashRow>>()
-            .unwrap();
+        let model = rows.as_any().downcast_ref::<VecModel<FlashRow>>().unwrap();
         let mut to_remove = Vec::new();
         for i in 0..model.row_count() {
             if model.row_data(i).unwrap().enabled {
@@ -81,10 +73,7 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(file) = rfd::FileDialog::new().pick_file() {
             let file_str = file.to_string_lossy().to_string();
             let rows = ui.get_rows();
-            let model = rows
-                .as_any()
-                .downcast_ref::<VecModel<FlashRow>>()
-                .unwrap();
+            let model = rows.as_any().downcast_ref::<VecModel<FlashRow>>().unwrap();
             if let Some(mut row) = model.row_data(index as usize) {
                 row.file_path = file_str.into();
                 model.set_row_data(index as usize, row);
@@ -104,10 +93,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.on_row_enabled_changed(move |index: i32, enabled: bool| {
         let ui = ui_weak.upgrade().unwrap();
         let rows = ui.get_rows();
-        let model = rows
-            .as_any()
-            .downcast_ref::<VecModel<FlashRow>>()
-            .unwrap();
+        let model = rows.as_any().downcast_ref::<VecModel<FlashRow>>().unwrap();
         if let Some(mut row) = model.row_data(index as usize) {
             row.enabled = enabled;
             model.set_row_data(index as usize, row);
@@ -118,10 +104,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.on_row_path_changed(move |index: i32, path: slint::SharedString| {
         let ui = ui_weak.upgrade().unwrap();
         let rows = ui.get_rows();
-        let model = rows
-            .as_any()
-            .downcast_ref::<VecModel<FlashRow>>()
-            .unwrap();
+        let model = rows.as_any().downcast_ref::<VecModel<FlashRow>>().unwrap();
         if let Some(mut row) = model.row_data(index as usize) {
             row.file_path = path;
             model.set_row_data(index as usize, row);
@@ -132,10 +115,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.on_row_addr_changed(move |index: i32, addr: slint::SharedString| {
         let ui = ui_weak.upgrade().unwrap();
         let rows = ui.get_rows();
-        let model = rows
-            .as_any()
-            .downcast_ref::<VecModel<FlashRow>>()
-            .unwrap();
+        let model = rows.as_any().downcast_ref::<VecModel<FlashRow>>().unwrap();
         if let Some(mut row) = model.row_data(index as usize) {
             row.address = addr;
             model.set_row_data(index as usize, row);
@@ -152,12 +132,10 @@ fn main() -> Result<(), slint::PlatformError> {
         }
 
         let rows = ui.get_rows();
-        let model = rows
-            .as_any()
-            .downcast_ref::<VecModel<FlashRow>>()
-            .unwrap();
+        let model = rows.as_any().downcast_ref::<VecModel<FlashRow>>().unwrap();
 
         let mut entries = Vec::new();
+
         for i in 0..model.row_count() {
             let row = model.row_data(i).unwrap();
             if !row.enabled {
@@ -167,9 +145,17 @@ fn main() -> Result<(), slint::PlatformError> {
             if path.is_empty() {
                 continue;
             }
+
+            let raw_addr = row.address.to_string();
+            let addr_str = if raw_addr.trim().is_empty() {
+                "0x0".to_string()
+            } else {
+                raw_addr
+            };
+
             entries.push(mfprog_esp_lib::FlashEntry {
-                addr: row.address.to_string(),
-                file_path: PathBuf::from(path),
+                addr: addr_str,
+                file_path: PathBuf::from(&path),
             });
         }
 
